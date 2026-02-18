@@ -130,4 +130,80 @@ router.post('/verify', async (req, res) => {
     }
 });
 
+// Resend Verification Code Route
+router.post('/resend-code', async (req, res) => {
+    const { email } = req.body;
+    try {
+        const user = await User.findOne({ email });
+        if (!user) return res.status(404).json({ message: "User not found" });
+
+        if (user.isVerified) {
+            return res.status(400).json({ message: "Account is already verified. Please login." });
+        }
+
+        // Generate a new 6-character alphanumeric code
+        const newCode = generateAlphanumericCode(6);
+
+        // Update user with new code and fresh timestamp
+        user.verificationCode = newCode;
+        user.codeCreatedAt = Date.now();
+        await user.save();
+
+        // Send Email via Resend using your branded template
+        await resend.emails.send({
+            from: 'SentonyTech <onboarding@resend.dev>',
+            to: email,
+            subject: 'Your NEW SentonyTech Verification Code',
+            html: `
+                <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 550px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 24px; overflow: hidden; background-color: #ffffff;">
+                    <div style="background-color: #f8fafc; padding: 30px; text-align: center; border-bottom: 1px solid #f1f5f9;">
+                        <div style="display: inline-block; vertical-align: middle;">
+                            <div style="background-color: #0284c7; padding: 8px; border-radius: 8px; display: inline-block;">
+                                <span style="color: #ffffff; font-size: 20px;">❄</span>
+                            </div>
+                            <span style="font-size: 22px; font-weight: 900; letter-spacing: -0.5px; color: #0f172a; margin-left: 10px; text-transform: uppercase;">
+                                SENTONY<span style="color: #0ea5e9;">TECH</span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <div style="padding: 40px 30px; text-align: center;">
+                        <div style="display: inline-flex; align-items: center; justify-content: center; width: 80px; height: 80px; background-color: #f0f9ff; color: #0284c7; border-radius: 50%; margin-bottom: 24px; line-height: 80px; font-size: 32px;">
+                            🔄
+                        </div>
+                        
+                        <h2 style="color: #0f172a; font-size: 28px; font-weight: 800; margin: 0 0 10px 0;">New Security Code</h2>
+                        <p style="color: #64748b; font-size: 16px; line-height: 1.6; margin: 0 auto 30px auto; max-width: 400px;">
+                            Hello <strong>${user.fullname}</strong>, as requested, here is your new 6-character security code.
+                        </p>
+                        
+                        <div style="background-color: #f8fafc; border: 2px solid #f1f5f9; padding: 25px; border-radius: 20px; display: inline-block; min-width: 250px;">
+                            <span style="font-family: 'Courier New', Courier, monospace; font-size: 36px; font-weight: 900; letter-spacing: 10px; color: #0f172a;">
+                                ${newCode}
+                            </span>
+                        </div>
+
+                        <p style="color: #ef4444; font-size: 14px; font-weight: 600; margin-top: 30px;">
+                            ⚠️ This new code also expires in 10 minutes.
+                        </p>
+                    </div>
+
+                    <div style="background-color: #f8fafc; padding: 25px; text-align: center; border-top: 1px solid #f1f5f9;">
+                        <p style="color: #94a3b8; font-size: 12px; margin: 0; line-height: 1.5;">
+                            &copy; 2026 SentonyTech. Quality AC & Tech Services.<br>
+                            If you didn't request this, you can safely ignore this email.
+                        </p>
+                    </div>
+                </div>
+            `
+        });
+
+        res.json({ message: "A new code has been sent to your email!" });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Failed to resend code" });
+    }
+});
+
 module.exports = router;
