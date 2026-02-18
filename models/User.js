@@ -5,8 +5,9 @@ const UserSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true },
     phone: { type: String, required: true },
     password: { type: String, required: true },
-    verificationCode: { type: String }, // Store the 4-digit code
-    isVerified: { type: Boolean, default: false }, // Track if they are verified
+    verificationCode: { type: String },
+    codeCreatedAt: { type: Date }, // NEW: To track expiration
+    isVerified: { type: Boolean, default: false },
     date: { type: Date, default: Date.now }
 });
 
