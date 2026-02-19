@@ -6,8 +6,13 @@ const UserSchema = new mongoose.Schema({
     phone: { type: String, required: true },
     password: { type: String, required: true },
     verificationCode: { type: String },
-    codeCreatedAt: { type: Date }, // NEW: To track expiration
+    codeCreatedAt: { type: Date }, 
     isVerified: { type: Boolean, default: false },
+    
+    // --- PASSWORD RESET FIELDS ---
+    resetPasswordToken: { type: String },
+    resetPasswordExpires: { type: Date },
+    
     date: { type: Date, default: Date.now }
 });
 
