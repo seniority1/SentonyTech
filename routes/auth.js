@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
-const crypto = require('crypto'); // Built-in for secure token generation
+const crypto = require('crypto');
+const jwt = require('jsonwebtoken'); // Added for JWT functionality
 const { Resend } = require('resend');
 const User = require('../models/User');
 
@@ -9,7 +10,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Helper function to generate alphanumeric code
 const generateAlphanumericCode = (length) => {
-    const characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Removed confusing chars like O, 0, I, 1
+    const characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let result = '';
     for (let i = 0; i < length; i++) {
         result += characters.charAt(Math.floor(Math.random() * characters.length));
@@ -17,7 +18,7 @@ const generateAlphanumericCode = (length) => {
     return result;
 };
 
-// --- LOGIN ROUTE ---
+// --- LOGIN ROUTE (WITH JWT) ---
 router.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -39,9 +40,18 @@ router.post('/login', async (req, res) => {
             return res.status(400).json({ message: "Invalid email or password." });
         }
 
-        // 4. Success - Return user details (Exclude sensitive password)
+        // 4. Create JWT Token
+        // Using a secret from .env or a fallback for development
+        const token = jwt.sign(
+            { id: user._id },
+            process.env.JWT_SECRET || 'sentony_secret_123',
+            { expiresIn: '1d' }
+        );
+
+        // 5. Success - Return token and user details
         res.status(200).json({
             message: "Login successful!",
+            token,
             user: {
                 id: user._id,
                 fullname: user.fullname,
