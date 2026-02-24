@@ -17,12 +17,51 @@ const generateAlphanumericCode = (length) => {
     return result;
 };
 
+// --- LOGIN ROUTE ---
+router.post('/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        // 1. Find user by email
+        const user = await User.findOne({ email: email.toLowerCase().trim() });
+        if (!user) {
+            return res.status(400).json({ message: "Invalid email or password." });
+        }
+
+        // 2. Check if the user has verified their email
+        if (!user.isVerified) {
+            return res.status(401).json({ message: "Please verify your email before logging in." });
+        }
+
+        // 3. Compare passwords
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            return res.status(400).json({ message: "Invalid email or password." });
+        }
+
+        // 4. Success - Return user details (Exclude sensitive password)
+        res.status(200).json({
+            message: "Login successful!",
+            user: {
+                id: user._id,
+                fullname: user.fullname,
+                email: user.email,
+                phone: user.phone
+            }
+        });
+
+    } catch (err) {
+        console.error("Login Error:", err);
+        res.status(500).json({ message: "Server error during login." });
+    }
+});
+
 // --- REGISTRATION ROUTE ---
 router.post('/register', async (req, res) => {
     try {
         const { fullname, email, phone, password } = req.body;
 
-        let user = await User.findOne({ email });
+        let user = await User.findOne({ email: email.toLowerCase().trim() });
         if (user) return res.status(400).json({ message: "User already exists" });
 
         const salt = await bcrypt.genSalt(10);
@@ -32,7 +71,7 @@ router.post('/register', async (req, res) => {
 
         user = new User({
             fullname,
-            email,
+            email: email.toLowerCase().trim(),
             phone,
             password: hashedPassword,
             verificationCode: code,
@@ -54,7 +93,7 @@ router.post('/register', async (req, res) => {
                             </div>
                             <span style="font-size: 22px; font-weight: 900; letter-spacing: -0.5px; color: #0f172a; margin-left: 10px; text-transform: uppercase;">
                                 SENTONY<span style="color: #0ea5e9;">TECH</span>
-                            </span>
+                            </span> 
                         </div>
                     </div>
                     <div style="padding: 40px 30px; text-align: center;">
@@ -82,7 +121,7 @@ router.post('/register', async (req, res) => {
 router.post('/verify', async (req, res) => {
     const { email, code } = req.body;
     try {
-        const user = await User.findOne({ email });
+        const user = await User.findOne({ email: email.toLowerCase().trim() });
         if (!user) return res.status(400).json({ message: "User not found" });
 
         const tenMinutes = 10 * 60 * 1000;
@@ -108,7 +147,7 @@ router.post('/verify', async (req, res) => {
 router.post('/resend-code', async (req, res) => {
     const { email } = req.body;
     try {
-        const user = await User.findOne({ email });
+        const user = await User.findOne({ email: email.toLowerCase().trim() });
         if (!user) return res.status(404).json({ message: "User not found" });
         if (user.isVerified) return res.status(400).json({ message: "Already verified." });
 
@@ -147,7 +186,7 @@ router.post('/resend-code', async (req, res) => {
 router.post('/forgot-password', async (req, res) => {
     const { email } = req.body;
     try {
-        const user = await User.findOne({ email });
+        const user = await User.findOne({ email: email.toLowerCase().trim() });
         if (!user) return res.status(404).json({ message: "No account found with this email." });
 
         const token = crypto.randomBytes(20).toString('hex');
@@ -155,7 +194,6 @@ router.post('/forgot-password', async (req, res) => {
         user.resetPasswordExpires = Date.now() + 3600000; // 1 Hour
         await user.save();
 
-        // Change this URL to your live site URL later
         const resetUrl = `https://sentony.netlify.app/reset-password.html?token=${token}`;
 
         await resend.emails.send({
