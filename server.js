@@ -5,20 +5,26 @@ require('dotenv').config();
 
 const app = express();
 
-// Middleware
+// --- PROXY CONFIGURATION ---
+// Required for express-rate-limit to work correctly on Render/Heroku
+app.set('trust proxy', 1);
+
+// --- MIDDLEWARE ---
 app.use(express.json());
 app.use(cors());
 
-// Database Connection
+// --- DATABASE CONNECTION ---
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log('✅ SentonyTech Database Connected...'))
     .catch(err => console.error('❌ Connection Error:', err));
 
-// Define Routes
+// --- DEFINE ROUTES ---
+// All auth routes (login, register, reset) are prefixed with /api/auth
 app.use('/api/auth', require('./routes/auth')); 
-// Note: This means all auth routes now start with /api/auth
 
+// Basic Health Check Route
 app.get('/', (req, res) => res.send('SentonyTech API is Running...'));
 
+// --- SERVER START ---
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Server started on port ${PORT}`));
