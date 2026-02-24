@@ -2,11 +2,32 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
-const jwt = require('jsonwebtoken'); // Added for JWT functionality
+const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit'); // Added for security
 const { Resend } = require('resend');
 const User = require('../models/User');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+
+// --- RATE LIMITER CONFIGURATION ---
+
+// Strict: 5 attempts per 15 minutes for Login and Password Resets
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    message: { message: "Too many attempts. Please try again after 15 minutes." },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+// Moderate: 10 attempts per hour for Registration and Resending codes
+const registerLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 10,
+    message: { message: "Too many requests. Please try again later." },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
 
 // Helper function to generate alphanumeric code
 const generateAlphanumericCode = (length) => {
@@ -18,37 +39,31 @@ const generateAlphanumericCode = (length) => {
     return result;
 };
 
-// --- LOGIN ROUTE (WITH JWT) ---
-router.post('/login', async (req, res) => {
+// --- LOGIN ROUTE (WITH JWT & RATE LIMITING) ---
+router.post('/login', loginLimiter, async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        // 1. Find user by email
         const user = await User.findOne({ email: email.toLowerCase().trim() });
         if (!user) {
             return res.status(400).json({ message: "Invalid email or password." });
         }
 
-        // 2. Check if the user has verified their email
         if (!user.isVerified) {
             return res.status(401).json({ message: "Please verify your email before logging in." });
         }
 
-        // 3. Compare passwords
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             return res.status(400).json({ message: "Invalid email or password." });
         }
 
-        // 4. Create JWT Token
-        // Using a secret from .env or a fallback for development
         const token = jwt.sign(
             { id: user._id },
             process.env.JWT_SECRET || 'sentony_secret_123',
             { expiresIn: '1d' }
         );
 
-        // 5. Success - Return token and user details
         res.status(200).json({
             message: "Login successful!",
             token,
@@ -66,8 +81,8 @@ router.post('/login', async (req, res) => {
     }
 });
 
-// --- REGISTRATION ROUTE ---
-router.post('/register', async (req, res) => {
+// --- REGISTRATION ROUTE (WITH RATE LIMITING) ---
+router.post('/register', registerLimiter, async (req, res) => {
     try {
         const { fullname, email, phone, password } = req.body;
 
@@ -153,8 +168,8 @@ router.post('/verify', async (req, res) => {
     }
 });
 
-// --- RESEND CODE ROUTE ---
-router.post('/resend-code', async (req, res) => {
+// --- RESEND CODE ROUTE (WITH RATE LIMITING) ---
+router.post('/resend-code', registerLimiter, async (req, res) => {
     const { email } = req.body;
     try {
         const user = await User.findOne({ email: email.toLowerCase().trim() });
@@ -192,8 +207,8 @@ router.post('/resend-code', async (req, res) => {
     }
 });
 
-// --- FORGOT PASSWORD ROUTE ---
-router.post('/forgot-password', async (req, res) => {
+// --- FORGOT PASSWORD ROUTE (WITH RATE LIMITING) ---
+router.post('/forgot-password', loginLimiter, async (req, res) => {
     const { email } = req.body;
     try {
         const user = await User.findOne({ email: email.toLowerCase().trim() });
