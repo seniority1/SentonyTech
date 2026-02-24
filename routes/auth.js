@@ -3,15 +3,16 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
-const rateLimit = require('express-rate-limit'); // Added for security
+const rateLimit = require('express-rate-limit');
+const { OAuth2Client } = require('google-auth-library'); // Added for Google Auth
 const { Resend } = require('resend');
 const User = require('../models/User');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+const googleClient = new OAuth2Client("142290704221-c4anu1ufqbap8bni1f5a6aqds1pcse34.apps.googleusercontent.com");
 
 // --- RATE LIMITER CONFIGURATION ---
 
-// Strict: 5 attempts per 15 minutes for Login and Password Resets
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 5,
@@ -20,7 +21,6 @@ const loginLimiter = rateLimit({
     legacyHeaders: false,
 });
 
-// Moderate: 10 attempts per hour for Registration and Resending codes
 const registerLimiter = rateLimit({
     windowMs: 60 * 60 * 1000,
     max: 10,
@@ -39,6 +39,51 @@ const generateAlphanumericCode = (length) => {
     return result;
 };
 
+// --- GOOGLE AUTH ROUTE ---
+router.post('/google', async (req, res) => {
+    try {
+        const { idToken } = req.body;
+        const ticket = await googleClient.verifyIdToken({
+            idToken,
+            audience: "142290704221-c4anu1ufqbap8bni1f5a6aqds1pcse34.apps.googleusercontent.com",
+        });
+
+        const { name, email, sub } = ticket.getPayload();
+
+        let user = await User.findOne({ email: email.toLowerCase().trim() });
+
+        if (!user) {
+            // Create new Google User (Skip verification for Google)
+            user = new User({
+                fullname: name,
+                email: email.toLowerCase().trim(),
+                googleId: sub,
+                isVerified: true 
+            });
+            await user.save();
+        }
+
+        const token = jwt.sign(
+            { id: user._id },
+            process.env.JWT_SECRET || 'sentony_secret_123',
+            { expiresIn: '1d' }
+        );
+
+        res.status(200).json({
+            message: "Google Login successful!",
+            token,
+            user: {
+                id: user._id,
+                fullname: user.fullname,
+                email: user.email
+            }
+        });
+    } catch (err) {
+        console.error("Google Auth Error:", err);
+        res.status(400).json({ message: "Google authentication failed." });
+    }
+});
+
 // --- LOGIN ROUTE (WITH JWT & RATE LIMITING) ---
 router.post('/login', loginLimiter, async (req, res) => {
     try {
@@ -47,6 +92,11 @@ router.post('/login', loginLimiter, async (req, res) => {
         const user = await User.findOne({ email: email.toLowerCase().trim() });
         if (!user) {
             return res.status(400).json({ message: "Invalid email or password." });
+        }
+
+        // Check if user has a password (they might have signed up with Google)
+        if (!user.password && user.googleId) {
+            return res.status(400).json({ message: "This account uses Google Sign-In. Please use the Google button." });
         }
 
         if (!user.isVerified) {
@@ -216,7 +266,7 @@ router.post('/forgot-password', loginLimiter, async (req, res) => {
 
         const token = crypto.randomBytes(20).toString('hex');
         user.resetPasswordToken = token;
-        user.resetPasswordExpires = Date.now() + 3600000; // 1 Hour
+        user.resetPasswordExpires = Date.now() + 3600000; 
         await user.save();
 
         const resetUrl = `https://sentony.netlify.app/reset-password.html?token=${token}`;
