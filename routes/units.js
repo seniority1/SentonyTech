@@ -33,4 +33,27 @@ router.post('/', protect, async (req, res) => {
     }
 });
 
+// @route   DELETE /api/units/:id
+// @desc    Delete an AC unit
+router.delete('/:id', protect, async (req, res) => {
+    try {
+        const unit = await ACUnit.findById(req.params.id);
+
+        if (!unit) {
+            return res.status(404).json({ message: 'Unit not found' });
+        }
+
+        // Security Check: Does this unit belong to the logged-in user?
+        if (unit.userId.toString() !== req.user.id) {
+            return res.status(401).json({ message: 'User not authorized to delete this unit' });
+        }
+
+        await unit.deleteOne();
+        res.json({ message: 'Unit removed successfully' });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
 module.exports = router;
