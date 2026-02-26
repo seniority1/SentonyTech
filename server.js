@@ -21,8 +21,11 @@ mongoose.connect(process.env.MONGO_URI)
 // 1. Auth Routes
 app.use('/api/auth', require('./routes/auth')); 
 
-// 2. AC Unit Routes (ADD THIS LINE TO FIX THE 404)
+// 2. AC Unit Routes
 app.use('/api/units', require('./routes/units')); 
+
+// 3. Booking Routes (NEW: Handles modal submissions and Telegram alerts)
+app.use('/api/bookings', require('./routes/bookings')); 
 
 // Basic Health Check Route
 app.get('/', (req, res) => res.send('SentonyTech API is Running...'));
