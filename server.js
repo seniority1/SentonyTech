@@ -6,7 +6,6 @@ require('dotenv').config();
 const app = express();
 
 // --- PROXY CONFIGURATION ---
-// Required for express-rate-limit to work correctly on Render/Heroku
 app.set('trust proxy', 1);
 
 // --- MIDDLEWARE ---
@@ -19,8 +18,11 @@ mongoose.connect(process.env.MONGO_URI)
     .catch(err => console.error('❌ Connection Error:', err));
 
 // --- DEFINE ROUTES ---
-// All auth routes (login, register, reset) are prefixed with /api/auth
+// 1. Auth Routes
 app.use('/api/auth', require('./routes/auth')); 
+
+// 2. AC Unit Routes (ADD THIS LINE TO FIX THE 404)
+app.use('/api/units', require('./routes/units')); 
 
 // Basic Health Check Route
 app.get('/', (req, res) => res.send('SentonyTech API is Running...'));
