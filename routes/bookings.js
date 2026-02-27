@@ -9,12 +9,15 @@ const axios = require('axios');
 router.post('/', protect, async (req, res) => {
     try {
         // 1. Create the booking object
-        // We manually map fields to ensure everything matches your Schema
+        // Including the new fields: unitNickname, hp, and quantity
         const newBooking = new Booking({
             userId: req.user.id,
             unitId: req.body.unitId,
+            unitNickname: req.body.unitNickname, // Capture the name (e.g., "Living Room")
+            hp: req.body.hp,                     // NEW: Capacity (e.g., "1.5 HP")
+            quantity: req.body.quantity,         // NEW: Number of units
             serviceType: req.body.serviceType,
-            scheduledDate: req.body.date, // Mapping 'date' from frontend to 'scheduledDate' in Schema
+            scheduledDate: req.body.date,        // Mapping 'date' from frontend to 'scheduledDate' in Schema
             whatsapp: req.body.whatsapp,
             phone: req.body.phone,
             address: req.body.address,
@@ -25,13 +28,17 @@ router.post('/', protect, async (req, res) => {
         const savedBooking = await newBooking.save();
 
         // 2. Format the Notification Message
-        // We use a fallback || 'N/A' so the bot doesn't crash on empty fields
+        // Updated to include HP and Quantity in the Telegram alert
         const message = `
 🔔 *New SentonyTech Booking!*
 ----------------------------
 👤 *User:* ${req.user.fullname || 'Client'}
+🏠 *Unit:* ${savedBooking.unitNickname || 'AC Unit'}
+❄️ *Capacity:* ${savedBooking.hp || 'N/A'}
+🔢 *Quantity:* ${savedBooking.quantity || 1}
 🛠 *Service:* ${savedBooking.serviceType}
 📅 *Date:* ${new Date(savedBooking.scheduledDate).toDateString()}
+----------------------------
 📱 *WhatsApp:* ${savedBooking.whatsapp}
 📞 *Alt Phone:* ${savedBooking.phone || 'None'}
 📍 *Address:* ${savedBooking.address}
@@ -41,13 +48,17 @@ router.post('/', protect, async (req, res) => {
         `;
 
         // 3. Trigger Telegram Alert
-        // Only attempt if variables exist to avoid Axios errors
         if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
-            await axios.post(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-                chat_id: process.env.TELEGRAM_CHAT_ID,
-                text: message,
-                parse_mode: 'Markdown'
-            });
+            try {
+                await axios.post(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                    chat_id: process.env.TELEGRAM_CHAT_ID,
+                    text: message,
+                    parse_mode: 'Markdown'
+                });
+            } catch (teleErr) {
+                console.error('Telegram Notification Failed:', teleErr.message);
+                // We don't fail the request if just the notification fails
+            }
         }
 
         res.status(201).json(savedBooking);
@@ -61,5 +72,4 @@ router.post('/', protect, async (req, res) => {
     }
 });
 
-// CRITICAL: Export the router so server.js can use it
 module.exports = router;
