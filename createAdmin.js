@@ -12,8 +12,8 @@ const createAdmin = async () => {
         // 2. CONFIGURE YOUR ADMIN DETAILS HERE
         const adminData = {
             fullname: "Sentony Admin",
-            email: "your-admin-email@example.com", // Change this
-            password: "YourSecurePassword123",      // Change this
+            email: "sentonytech@gmail.com.com", // Change this
+            password: "alp@00hoN",      // Change this
         };
 
         // 3. Check if admin already exists
