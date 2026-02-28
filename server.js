@@ -1,39 +1,61 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const bcrypt = require('bcryptjs');
+const Admin = require('./models/Admin'); // Ensure this model exists!
 require('dotenv').config();
 
 const app = express();
 
 // --- PROXY CONFIGURATION ---
-// Essential for getting the correct Client IP on Render for your Rugged Security
 app.set('trust proxy', 1);
 
 // --- MIDDLEWARE ---
 app.use(express.json());
 app.use(cors());
 
+// --- ADMIN SEEDING LOGIC (The Rugged Auto-Generator) ---
+const seedAdmin = async () => {
+    try {
+        const adminCount = await Admin.countDocuments();
+        if (adminCount === 0) {
+            console.log("🚀 No admin found. Seeding rugged admin...");
+            
+            // It will check Render Env first, otherwise use your provided password
+            const adminEmail = "sentonytech@gmail.com";
+            const adminPassword = process.env.INITIAL_ADMIN_PASSWORD || "alp@00hoN";
+
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(adminPassword, salt);
+
+            await Admin.create({
+                fullname: "Sentony Master Admin",
+                email: adminEmail,
+                password: hashedPassword,
+                adminIp: null, // Ready for your first login to lock it
+                adminFingerprint: null
+            });
+
+            console.log(`✅ Admin created: ${adminEmail}. Login to establish rugged lock.`);
+        }
+    } catch (err) {
+        console.error("❌ Admin seeding failed:", err.message);
+    }
+};
+
 // --- DATABASE CONNECTION ---
 mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log('✅ SentonyTech Database Connected...'))
+    .then(() => {
+        console.log('✅ SentonyTech Database Connected...');
+        seedAdmin(); // Runs every time the server starts
+    })
     .catch(err => console.error('❌ Connection Error:', err));
 
 // --- DEFINE ROUTES ---
-
-// 1. Auth Routes (Regular Users)
 app.use('/api/auth', require('./routes/auth')); 
-
-// 2. AC Unit Routes
 app.use('/api/units', require('./routes/units')); 
-
-// 3. Booking Routes (Handles new modal submissions and Telegram alerts)
 app.use('/api/bookings', require('./routes/bookings')); 
-
-// 4. History Routes (Handles the user's personal service log)
 app.use('/api/history', require('./routes/history')); 
-
-// 5. Admin Routes (NEW: Rugged Login, Order Management, and Dashboard)
-// This links to your specialized Admin model and IP-lock logic
 app.use('/api/admin', require('./routes/admin'));
 
 // Basic Health Check Route
