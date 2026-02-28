@@ -6,6 +6,7 @@ require('dotenv').config();
 const app = express();
 
 // --- PROXY CONFIGURATION ---
+// Essential for getting the correct Client IP on Render for your Rugged Security
 app.set('trust proxy', 1);
 
 // --- MIDDLEWARE ---
@@ -19,7 +20,7 @@ mongoose.connect(process.env.MONGO_URI)
 
 // --- DEFINE ROUTES ---
 
-// 1. Auth Routes
+// 1. Auth Routes (Regular Users)
 app.use('/api/auth', require('./routes/auth')); 
 
 // 2. AC Unit Routes
@@ -28,9 +29,12 @@ app.use('/api/units', require('./routes/units'));
 // 3. Booking Routes (Handles new modal submissions and Telegram alerts)
 app.use('/api/bookings', require('./routes/bookings')); 
 
-// 4. History Routes (NEW: Added to handle the service log and history.js)
-// This fixes the "Cannot GET /api/history" 404 error
+// 4. History Routes (Handles the user's personal service log)
 app.use('/api/history', require('./routes/history')); 
+
+// 5. Admin Routes (NEW: Rugged Login, Order Management, and Dashboard)
+// This links to your specialized Admin model and IP-lock logic
+app.use('/api/admin', require('./routes/admin'));
 
 // Basic Health Check Route
 app.get('/', (req, res) => res.send('SentonyTech API is Running...'));
