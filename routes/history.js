@@ -1,24 +1,22 @@
 const express = require('express');
 const router = express.Router();
-const Booking = require('../models/Booking'); // Uses the existing Booking model
+const Booking = require('../models/Booking'); 
 const auth = require('../middleware/auth');
 
 // @route   GET /api/history
 // @desc    Get the service log for the logged-in user
 router.get('/', auth, async (req, res) => {
     try {
-        // Fetch all records for this user, newest first
+        // Find bookings where userId matches the ID from the JWT token
         const history = await Booking.find({ userId: req.user.id })
-                                     .sort({ scheduledDate: -1 });
-        
-        if (!history) {
-            return res.status(404).json({ msg: 'No service history found' });
-        }
+                                     .sort({ createdAt: -1 }); // Better to sort by creation time
 
-        res.json(history);
+        // Return empty array if none found (don't send 404, it confuses the frontend)
+        res.json(history || []); 
+        
     } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server Error fetching history');
+        console.error("History Route Error:", err.message);
+        res.status(500).json({ msg: 'Server Error fetching history' });
     }
 });
 
