@@ -4,7 +4,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const Admin = require('../models/Admin');
 const Booking = require('../models/Booking');
-const { protect, adminOnly } = require('../middleware/authMiddleware');
+const { protect, adminOnly } = require('../middleware/adminMiddleware');
 
 // @route   POST /api/admin/rugged-login
 // @desc    Admin Login with Hardware/Network Lock
