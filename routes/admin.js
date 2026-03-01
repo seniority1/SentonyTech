@@ -73,7 +73,7 @@ router.get('/orders', protect, adminOnly, async (req, res) => {
 });
 
 // @route   PUT /api/admin/orders/:id/status
-// @desc    Update order status + Telegram Notification
+// @desc    Update order status + Comprehensive Telegram Notification
 router.put('/orders/:id/status', protect, adminOnly, async (req, res) => {
     try {
         const { status } = req.body;
@@ -85,12 +85,18 @@ router.put('/orders/:id/status', protect, adminOnly, async (req, res) => {
 
         if (!updatedBooking) return res.status(404).json({ message: "Order not found" });
 
-        // Trigger Telegram Alert
+        // Trigger Telegram Alert with all Schema Details
         const statusEmoji = status === 'Completed' ? '✅' : '🔵';
         const msg = `${statusEmoji} <b>SENTONY STATUS UPDATE</b>\n\n` +
+                    `<b>Status:</b> ${status}\n` +
                     `<b>Service:</b> ${updatedBooking.serviceType}\n` +
-                    `<b>Customer:</b> ${updatedBooking.customerName}\n` +
-                    `<b>New Status:</b> ${status}`;
+                    `<b>Customer:</b> ${updatedBooking.whatsapp}\n` +
+                    `--------------------------\n` +
+                    `<b>Unit:</b> ${updatedBooking.unitNickname || 'Not specified'}\n` +
+                    `<b>Specs:</b> ${updatedBooking.hp} (${updatedBooking.quantity} unit/s)\n` +
+                    `<b>Address:</b> ${updatedBooking.address}\n` +
+                    `<b>Landmark:</b> ${updatedBooking.landmark || 'No landmark'}`;
+        
         sendTelegramAlert(msg);
 
         res.json(updatedBooking);
@@ -100,7 +106,7 @@ router.put('/orders/:id/status', protect, adminOnly, async (req, res) => {
 });
 
 // @route   PUT /api/admin/orders/:id/assign
-// @desc    Assign a technician + Telegram Notification
+// @desc    Assign a technician + Comprehensive Telegram Notification
 router.put('/orders/:id/assign', protect, adminOnly, async (req, res) => {
     try {
         const { assignedTech } = req.body;
@@ -112,11 +118,14 @@ router.put('/orders/:id/assign', protect, adminOnly, async (req, res) => {
 
         if (!updatedBooking) return res.status(404).json({ message: "Order not found" });
 
-        // Trigger Telegram Alert
+        // Trigger Telegram Alert for Assignment
         const msg = `👤 <b>TECH ASSIGNED</b>\n\n` +
-                    `<b>Service:</b> ${updatedBooking.serviceType}\n` +
                     `<b>Technician:</b> ${assignedTech}\n` +
-                    `<b>Address:</b> ${updatedBooking.address}`;
+                    `<b>Service:</b> ${updatedBooking.serviceType}\n` +
+                    `<b>Unit Info:</b> ${updatedBooking.hp} - ${updatedBooking.unitNickname}\n` +
+                    `<b>WhatsApp:</b> ${updatedBooking.whatsapp}\n` +
+                    `<b>Location:</b> ${updatedBooking.address}`;
+        
         sendTelegramAlert(msg);
 
         res.json(updatedBooking);
