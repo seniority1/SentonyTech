@@ -6,7 +6,7 @@ const Admin = require('../models/Admin');
 const Booking = require('../models/Booking');
 const { protect, adminOnly } = require('../middleware/adminMiddleware');
 
-// @route   POST /api/admin/rugged-login
+// @route   POST /api/admin/login
 // @desc    Admin Login with Hardware/Network Lock
 router.post('/login', async (req, res) => {
     const { email, password, fingerprint } = req.body;
@@ -22,20 +22,16 @@ router.post('/login', async (req, res) => {
         if (!isMatch) return res.status(400).json({ message: "Invalid Credentials" });
 
         // --- RUGGED SECURITY GATE ---
-        
-        // 1. Initial Setup: Trust the first device that logs in
         if (!admin.adminIp && !admin.adminFingerprint) {
             admin.adminIp = clientIp;
             admin.adminFingerprint = fingerprint;
             await admin.save();
             console.log(`🔒 Rugged Lock established for Admin: ${email} at IP ${clientIp}`);
-        } 
-        // 2. Verification: Block any other device or network
-        else {
+        } else {
             if (admin.adminIp !== clientIp || admin.adminFingerprint !== fingerprint) {
                 console.error(`🚨 UNAUTHORIZED ADMIN ATTEMPT: Expected ${admin.adminIp}, got ${clientIp}`);
                 return res.status(403).json({ 
-                    message: "Rugged Security Error: Unauthorized Device or Network. Your access attempt has been logged." 
+                    message: "Rugged Security Error: Unauthorized Device or Network." 
                 });
             }
         }
@@ -64,6 +60,48 @@ router.get('/orders', protect, adminOnly, async (req, res) => {
         res.json(orders);
     } catch (err) {
         res.status(500).json({ message: "Error fetching orders" });
+    }
+});
+
+// @route   PUT /api/admin/orders/:id/status
+// @desc    Update order status (Pending, En Route, Completed)
+router.put('/orders/:id/status', protect, adminOnly, async (req, res) => {
+    try {
+        const { status } = req.body;
+        
+        const updatedBooking = await Booking.findByIdAndUpdate(
+            req.params.id,
+            { status: status },
+            { new: true }
+        );
+
+        if (!updatedBooking) return res.status(404).json({ message: "Order not found" });
+
+        res.json(updatedBooking);
+        console.log(`✅ Order ${req.params.id} status updated to: ${status}`);
+    } catch (err) {
+        res.status(500).json({ message: "Status update failed" });
+    }
+});
+
+// @route   PUT /api/admin/orders/:id/assign
+// @desc    Assign a technician to an order
+router.put('/orders/:id/assign', protect, adminOnly, async (req, res) => {
+    try {
+        const { assignedTech } = req.body;
+        
+        const updatedBooking = await Booking.findByIdAndUpdate(
+            req.params.id,
+            { assignedTech: assignedTech },
+            { new: true }
+        );
+
+        if (!updatedBooking) return res.status(404).json({ message: "Order not found" });
+
+        res.json(updatedBooking);
+        console.log(`👤 Tech Assigned to ${req.params.id}: ${assignedTech}`);
+    } catch (err) {
+        res.status(500).json({ message: "Assignment failed" });
     }
 });
 
