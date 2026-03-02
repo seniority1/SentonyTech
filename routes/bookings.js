@@ -4,31 +4,105 @@ const Booking = require('../models/Booking');
 const { protect } = require('../middleware/authMiddleware');
 const axios = require('axios');
 
-// @route   POST /api/bookings
-// @desc    Create a booking and notify via Telegram
+/**
+ * 1. GET /api/bookings/active
+ * Used by Dashboard to check if the tracking card should be visible
+ */
+router.get('/active', protect, async (req, res) => {
+    try {
+        const activeBooking = await Booking.findOne({
+            userId: req.user.id,
+            status: { $in: ['En Route', 'Arrived'] }
+        }).sort({ createdAt: -1 }); // Get the most recent active one
+
+        res.json(activeBooking);
+    } catch (err) {
+        res.status(500).json({ message: 'Server error fetching active job' });
+    }
+});
+
+/**
+ * 2. GET /api/bookings/:id/track
+ * Used by track.html to get map coordinates and tech details
+ */
+router.get('/:id/track', protect, async (req, res) => {
+    try {
+        const booking = await Booking.findById(req.params.id);
+        if (!booking) return res.status(404).json({ message: 'Booking not found' });
+
+        // Ensure user only tracks their own booking
+        if (booking.userId.toString() !== req.user.id) {
+            return res.status(401).json({ message: 'Unauthorized' });
+        }
+
+        res.json({
+            techLat: booking.techLocation.lat,
+            techLng: booking.techLocation.lng,
+            userLat: booking.userLocation.lat,
+            userLng: booking.userLocation.lng,
+            techName: booking.assignedTech,
+            techPhone: booking.techPhone,
+            eta: booking.eta,
+            address: booking.address,
+            status: booking.status
+        });
+    } catch (err) {
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+/**
+ * 3. PATCH /api/bookings/:id/location
+ * Used by the Tech/Admin to update GPS coordinates
+ */
+router.patch('/:id/location', protect, async (req, res) => {
+    try {
+        const { lat, lng, eta } = req.body;
+        const updateData = {
+            'techLocation.lat': lat,
+            'techLocation.lng': lng
+        };
+        if (eta) updateData.eta = eta;
+
+        const updatedBooking = await Booking.findByIdAndUpdate(
+            req.params.id,
+            { $set: updateData },
+            { new: true }
+        );
+
+        res.json(updatedBooking);
+    } catch (err) {
+        res.status(500).json({ message: 'Failed to update location' });
+    }
+});
+
+/**
+ * 4. POST /api/bookings
+ * Create a booking and notify via Telegram
+ */
 router.post('/', protect, async (req, res) => {
     try {
-        // 1. Create the booking object
-        // Including the new fields: unitNickname, hp, and quantity
+        // When creating a booking, we can set default user coordinates 
+        // Note: In production, you'd use a Geocoding API to turn address into lat/lng
         const newBooking = new Booking({
             userId: req.user.id,
             unitId: req.body.unitId,
-            unitNickname: req.body.unitNickname, // Capture the name (e.g., "Living Room")
-            hp: req.body.hp,                     // NEW: Capacity (e.g., "1.5 HP")
-            quantity: req.body.quantity,         // NEW: Number of units
+            unitNickname: req.body.unitNickname,
+            hp: req.body.hp,
+            quantity: req.body.quantity,
             serviceType: req.body.serviceType,
-            scheduledDate: req.body.date,        // Mapping 'date' from frontend to 'scheduledDate' in Schema
+            scheduledDate: req.body.date,
             whatsapp: req.body.whatsapp,
             phone: req.body.phone,
             address: req.body.address,
             landmark: req.body.landmark,
-            status: 'Pending'
+            status: 'Pending',
+            // Default user location (e.g., center of your city)
+            userLocation: { lat: 6.5244, lng: 3.3792 } 
         });
 
         const savedBooking = await newBooking.save();
 
-        // 2. Format the Notification Message
-        // Updated to include HP and Quantity in the Telegram alert
         const message = `
 🔔 *New SentonyTech Booking!*
 ----------------------------
@@ -39,15 +113,10 @@ router.post('/', protect, async (req, res) => {
 🛠 *Service:* ${savedBooking.serviceType}
 📅 *Date:* ${new Date(savedBooking.scheduledDate).toDateString()}
 ----------------------------
-📱 *WhatsApp:* ${savedBooking.whatsapp}
-📞 *Alt Phone:* ${savedBooking.phone || 'None'}
 📍 *Address:* ${savedBooking.address}
-🚩 *Landmark:* ${savedBooking.landmark || 'Not specified'}
-----------------------------
 ✅ *Status:* Pending Assignment
         `;
 
-        // 3. Trigger Telegram Alert
         if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
             try {
                 await axios.post(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
@@ -57,7 +126,6 @@ router.post('/', protect, async (req, res) => {
                 });
             } catch (teleErr) {
                 console.error('Telegram Notification Failed:', teleErr.message);
-                // We don't fail the request if just the notification fails
             }
         }
 
@@ -65,10 +133,7 @@ router.post('/', protect, async (req, res) => {
 
     } catch (err) {
         console.error('Booking Error:', err.message);
-        res.status(500).json({ 
-            message: 'Booking failed', 
-            error: err.message 
-        });
+        res.status(500).json({ message: 'Booking failed', error: err.message });
     }
 });
 
