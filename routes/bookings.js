@@ -12,8 +12,9 @@ router.get('/active', protect, async (req, res) => {
     try {
         const activeBooking = await Booking.findOne({
             userId: req.user.id,
-            status: { $in: ['En Route', 'Arrived'] }
-        }).sort({ createdAt: -1 }); // Get the most recent active one
+            // Include 'Technician Assigned' so the card shows up as soon as someone is picked
+            status: { $in: ['Technician Assigned', 'En Route', 'Arrived'] }
+        }).sort({ createdAt: -1 }); 
 
         res.json(activeBooking);
     } catch (err) {
@@ -30,7 +31,6 @@ router.get('/:id/track', protect, async (req, res) => {
         const booking = await Booking.findById(req.params.id);
         if (!booking) return res.status(404).json({ message: 'Booking not found' });
 
-        // Ensure user only tracks their own booking
         if (booking.userId.toString() !== req.user.id) {
             return res.status(401).json({ message: 'Unauthorized' });
         }
@@ -41,10 +41,11 @@ router.get('/:id/track', protect, async (req, res) => {
             userLat: booking.userLocation.lat,
             userLng: booking.userLocation.lng,
             techName: booking.assignedTech,
-            techPhone: booking.techPhone,
+            techPhone: booking.techPhone, // This is now sent to the client's map
             eta: booking.eta,
             address: booking.address,
-            status: booking.status
+            status: booking.status,
+            serviceType: booking.serviceType
         });
     } catch (err) {
         res.status(500).json({ message: 'Server error' });
@@ -82,11 +83,10 @@ router.patch('/:id/location', protect, async (req, res) => {
  */
 router.post('/', protect, async (req, res) => {
     try {
-        // When creating a booking, we can set default user coordinates 
-        // Note: In production, you'd use a Geocoding API to turn address into lat/lng
         const newBooking = new Booking({
             userId: req.user.id,
             unitId: req.body.unitId,
+            customerName: req.user.fullname || 'Client', // Added to save to the model
             unitNickname: req.body.unitNickname,
             hp: req.body.hp,
             quantity: req.body.quantity,
@@ -97,19 +97,18 @@ router.post('/', protect, async (req, res) => {
             address: req.body.address,
             landmark: req.body.landmark,
             status: 'Pending',
-            // Default user location (e.g., center of your city)
+            // Default user location (Lagos Center)
             userLocation: { lat: 6.5244, lng: 3.3792 } 
         });
 
         const savedBooking = await newBooking.save();
 
+        // Telegram Message logic
         const message = `
 🔔 *New SentonyTech Booking!*
 ----------------------------
 👤 *User:* ${req.user.fullname || 'Client'}
 🏠 *Unit:* ${savedBooking.unitNickname || 'AC Unit'}
-❄️ *Capacity:* ${savedBooking.hp || 'N/A'}
-🔢 *Quantity:* ${savedBooking.quantity || 1}
 🛠 *Service:* ${savedBooking.serviceType}
 📅 *Date:* ${new Date(savedBooking.scheduledDate).toDateString()}
 ----------------------------
