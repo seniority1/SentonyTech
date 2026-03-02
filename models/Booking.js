@@ -29,6 +29,18 @@ const BookingSchema = new mongoose.Schema({
     address: { type: String, required: true },
     landmark: { type: String },
     
+    // LIVE TRACKING GEOLOCATION FIELDS
+    // Coordinates for the service destination (Customer's house)
+    userLocation: {
+        lat: { type: Number, default: 0 },
+        lng: { type: Number, default: 0 }
+    },
+    // Coordinates for the moving technician
+    techLocation: {
+        lat: { type: Number, default: 0 },
+        lng: { type: Number, default: 0 }
+    },
+    
     // Command Center Fields
     status: { 
         type: String, 
@@ -37,15 +49,25 @@ const BookingSchema = new mongoose.Schema({
             'Confirmed', 
             'Technician Assigned', 
             'En Route', 
+            'Arrived', // Added to match tracker logic
             'Completed', 
             'Cancelled'
         ], 
         default: 'Pending' 
     },
-    // NEW: Field to store the assigned technician's name/ID
+    
+    // Technician Details for the Tracking UI
     assignedTech: { 
         type: String, 
         default: 'Unassigned' 
+    },
+    techPhone: {
+        type: String,
+        default: ''
+    },
+    eta: {
+        type: String,
+        default: 'Calculating...'
     },
     
     createdAt: { type: Date, default: Date.now }
