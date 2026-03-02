@@ -26,7 +26,6 @@ const sendTelegramAlert = async (message) => {
 };
 
 // @route   POST /api/admin/login
-// @desc    Admin Login with Hardware/Network Lock
 router.post('/login', async (req, res) => {
     const { email, password, fingerprint } = req.body;
     const clientIp = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress;
@@ -38,7 +37,6 @@ router.post('/login', async (req, res) => {
         const isMatch = await bcrypt.compare(password, admin.password);
         if (!isMatch) return res.status(400).json({ message: "Invalid Credentials" });
 
-        // --- RUGGED SECURITY GATE ---
         if (!admin.adminIp && !admin.adminFingerprint) {
             admin.adminIp = clientIp;
             admin.adminFingerprint = fingerprint;
@@ -62,7 +60,6 @@ router.post('/login', async (req, res) => {
 });
 
 // @route   GET /api/admin/orders
-// @desc    Fetch all bookings for the dashboard
 router.get('/orders', protect, adminOnly, async (req, res) => {
     try {
         const orders = await Booking.find().sort({ createdAt: -1 });
@@ -73,7 +70,6 @@ router.get('/orders', protect, adminOnly, async (req, res) => {
 });
 
 // @route   PUT /api/admin/orders/:id/status
-// @desc    Update order status + Comprehensive Telegram Notification
 router.put('/orders/:id/status', protect, adminOnly, async (req, res) => {
     try {
         const { status } = req.body;
@@ -85,7 +81,6 @@ router.put('/orders/:id/status', protect, adminOnly, async (req, res) => {
 
         if (!updatedBooking) return res.status(404).json({ message: "Order not found" });
 
-        // Trigger Telegram Alert with all Schema Details
         const statusEmoji = status === 'Completed' ? '✅' : '🔵';
         const msg = `${statusEmoji} <b>SENTONY STATUS UPDATE</b>\n\n` +
                     `<b>Status:</b> ${status}\n` +
@@ -98,7 +93,6 @@ router.put('/orders/:id/status', protect, adminOnly, async (req, res) => {
                     `<b>Landmark:</b> ${updatedBooking.landmark || 'No landmark'}`;
         
         sendTelegramAlert(msg);
-
         res.json(updatedBooking);
     } catch (err) {
         res.status(500).json({ message: "Status update failed" });
@@ -106,24 +100,31 @@ router.put('/orders/:id/status', protect, adminOnly, async (req, res) => {
 });
 
 // @route   PUT /api/admin/orders/:id/assign
-// @desc    Assign a technician + Comprehensive Telegram Notification
+// @desc    Assign a technician + Tech Phone + Telegram Notification
 router.put('/orders/:id/assign', protect, adminOnly, async (req, res) => {
     try {
-        const { assignedTech } = req.body;
+        // Now accepting techPhone from the request body
+        const { assignedTech, techPhone } = req.body; 
+        
         const updatedBooking = await Booking.findByIdAndUpdate(
             req.params.id,
-            { assignedTech: assignedTech },
+            { 
+                assignedTech: assignedTech,
+                techPhone: techPhone // Saving to DB for client map access
+            },
             { new: true }
         );
 
         if (!updatedBooking) return res.status(404).json({ message: "Order not found" });
 
-        // Trigger Telegram Alert for Assignment
+        // Trigger Telegram Alert including the tech's contact
         const msg = `👤 <b>TECH ASSIGNED</b>\n\n` +
                     `<b>Technician:</b> ${assignedTech}\n` +
+                    `<b>Tech Contact:</b> ${techPhone || 'Not provided'}\n` +
                     `<b>Service:</b> ${updatedBooking.serviceType}\n` +
+                    `--------------------------\n` +
                     `<b>Unit Info:</b> ${updatedBooking.hp} - ${updatedBooking.unitNickname}\n` +
-                    `<b>WhatsApp:</b> ${updatedBooking.whatsapp}\n` +
+                    `<b>Client WhatsApp:</b> ${updatedBooking.whatsapp}\n` +
                     `<b>Location:</b> ${updatedBooking.address}`;
         
         sendTelegramAlert(msg);
