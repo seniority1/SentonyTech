@@ -2,7 +2,8 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
-const Admin = require('./models/Admin'); // Ensure this model exists!
+const webpush = require('web-push'); // 1. Added web-push
+const Admin = require('./models/Admin'); 
 require('dotenv').config();
 
 const app = express();
@@ -14,17 +15,53 @@ app.set('trust proxy', 1);
 app.use(express.json());
 app.use(cors());
 
-// --- ADMIN SEEDING LOGIC (The Rugged Auto-Generator) ---
+// --- 2. CONFIGURE WEB PUSH ---
+webpush.setVapidDetails(
+    'mailto:sentonytech@gmail.com',
+    process.env.PUBLIC_VAPID_KEY,
+    process.env.PRIVATE_VAPID_KEY
+);
+
+// We store the subscription in a variable for now. 
+// In a high-traffic app, you'd save this to a "Subscription" MongoDB model.
+let adminPushSubscription = null; 
+
+// --- 3. NOTIFICATION ENDPOINT ---
+// Your admin dashboard will call this to "register" your browser
+app.post('/api/admin/subscribe-push', (req, res) => {
+    adminPushSubscription = req.body;
+    console.log("✅ Admin browser subscribed for Push Notifications");
+    res.status(201).json({ message: 'Subscribed successfully.' });
+});
+
+// --- 4. GLOBAL NOTIFICATION TRIGGER ---
+// You can use this function anywhere in your backend to send an alert
+app.post('/api/admin/test-notification', (req, res) => {
+    if (!adminPushSubscription) {
+        return res.status(400).json({ error: "No admin subscription found. Open dashboard first." });
+    }
+
+    const payload = JSON.stringify({
+        title: "Sentony Command",
+        body: "Test Notification: System is Online! 🚀"
+    });
+
+    webpush.sendNotification(adminPushSubscription, payload)
+        .then(() => res.json({ success: true }))
+        .catch(err => {
+            console.error("Push Error:", err);
+            res.status(500).json({ error: "Push failed" });
+        });
+});
+
+// --- ADMIN SEEDING LOGIC ---
 const seedAdmin = async () => {
     try {
         const adminCount = await Admin.countDocuments();
         if (adminCount === 0) {
             console.log("🚀 No admin found. Seeding rugged admin...");
-            
-            // It will check Render Env first, otherwise use your provided password
             const adminEmail = "sentonytech@gmail.com";
             const adminPassword = process.env.INITIAL_ADMIN_PASSWORD || "alp@00hoN";
-
             const salt = await bcrypt.genSalt(10);
             const hashedPassword = await bcrypt.hash(adminPassword, salt);
 
@@ -32,11 +69,10 @@ const seedAdmin = async () => {
                 fullname: "Sentony Master Admin",
                 email: adminEmail,
                 password: hashedPassword,
-                adminIp: null, // Ready for your first login to lock it
+                adminIp: null,
                 adminFingerprint: null
             });
-
-            console.log(`✅ Admin created: ${adminEmail}. Login to establish rugged lock.`);
+            console.log(`✅ Admin created: ${adminEmail}.`);
         }
     } catch (err) {
         console.error("❌ Admin seeding failed:", err.message);
@@ -47,7 +83,7 @@ const seedAdmin = async () => {
 mongoose.connect(process.env.MONGO_URI)
     .then(() => {
         console.log('✅ SentonyTech Database Connected...');
-        seedAdmin(); // Runs every time the server starts
+        seedAdmin();
     })
     .catch(err => console.error('❌ Connection Error:', err));
 
