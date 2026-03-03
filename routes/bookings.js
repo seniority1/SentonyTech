@@ -3,16 +3,39 @@ const router = express.Router();
 const Booking = require('../models/Booking');
 const { protect } = require('../middleware/authMiddleware');
 const axios = require('axios');
+const webpush = require('web-push'); // 1. Import web-push
+
+/**
+ * HELPER: Send Push Notification to Admin
+ * This reaches out to the subscription stored in your server.js
+ */
+const sendAdminNotification = async (booking) => {
+    // Access the global variable we defined in server.js
+    // Note: If you move to a multi-admin setup later, you'd fetch subscriptions from DB
+    if (global.adminPushSubscription) {
+        const payload = JSON.stringify({
+            title: "New Sentony Deployment! 🛠️",
+            body: `${booking.serviceType} requested by ${booking.customerName || 'Client'} at ${booking.address}`,
+            icon: "/logo.png",
+            data: { url: "/admin-dashboard.html" }
+        });
+
+        try {
+            await webpush.sendNotification(global.adminPushSubscription, payload);
+            console.log("✅ Push Notification sent to Admin");
+        } catch (err) {
+            console.error("❌ Push Notification Failed:", err.message);
+        }
+    }
+};
 
 /**
  * 1. GET /api/bookings/active
- * Used by Dashboard to check if the tracking card should be visible
  */
 router.get('/active', protect, async (req, res) => {
     try {
         const activeBooking = await Booking.findOne({
             userId: req.user.id,
-            // Include 'Technician Assigned' so the card shows up as soon as someone is picked
             status: { $in: ['Technician Assigned', 'En Route', 'Arrived'] }
         }).sort({ createdAt: -1 }); 
 
@@ -24,7 +47,6 @@ router.get('/active', protect, async (req, res) => {
 
 /**
  * 2. GET /api/bookings/:id/track
- * Used by track.html to get map coordinates and tech details
  */
 router.get('/:id/track', protect, async (req, res) => {
     try {
@@ -41,7 +63,7 @@ router.get('/:id/track', protect, async (req, res) => {
             userLat: booking.userLocation.lat,
             userLng: booking.userLocation.lng,
             techName: booking.assignedTech,
-            techPhone: booking.techPhone, // This is now sent to the client's map
+            techPhone: booking.techPhone,
             eta: booking.eta,
             address: booking.address,
             status: booking.status,
@@ -54,7 +76,6 @@ router.get('/:id/track', protect, async (req, res) => {
 
 /**
  * 3. PATCH /api/bookings/:id/location
- * Used by the Tech/Admin to update GPS coordinates
  */
 router.patch('/:id/location', protect, async (req, res) => {
     try {
@@ -79,14 +100,14 @@ router.patch('/:id/location', protect, async (req, res) => {
 
 /**
  * 4. POST /api/bookings
- * Create a booking and notify via Telegram
+ * Create a booking and notify via Telegram + Web Push
  */
 router.post('/', protect, async (req, res) => {
     try {
         const newBooking = new Booking({
             userId: req.user.id,
             unitId: req.body.unitId,
-            customerName: req.user.fullname || 'Client', // Added to save to the model
+            customerName: req.user.fullname || 'Client',
             unitNickname: req.body.unitNickname,
             hp: req.body.hp,
             quantity: req.body.quantity,
@@ -97,13 +118,16 @@ router.post('/', protect, async (req, res) => {
             address: req.body.address,
             landmark: req.body.landmark,
             status: 'Pending',
-            // Default user location (Lagos Center)
             userLocation: { lat: 6.5244, lng: 3.3792 } 
         });
 
         const savedBooking = await newBooking.save();
 
-        // Telegram Message logic
+        // --- WEB PUSH NOTIFICATION ---
+        // Fired immediately upon successful save
+        sendAdminNotification(savedBooking);
+
+        // --- TELEGRAM MESSAGE LOGIC ---
         const message = `
 🔔 *New SentonyTech Booking!*
 ----------------------------
